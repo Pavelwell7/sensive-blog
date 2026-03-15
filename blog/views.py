@@ -3,6 +3,7 @@ from blog.models import Comment, Post, Tag
 from django.db.models import Count
 
 def serialize_post_optimized(post):
+    tags = post.tags.all()
     return {
         'title': post.title,
         'teaser_text': post.text[:200],
@@ -11,7 +12,7 @@ def serialize_post_optimized(post):
         'image_url': post.image.url if post.image else None,
         'published_at': post.published_at,
         'slug': post.slug,
-        'tags': [serialize_tag(tag) for tag in post.tags.all()],
+        'tags': [serialize_tag(tag) for tag in tags],
         'first_tag_title': post.tags.all()[0].title,
     }
 
@@ -40,7 +41,7 @@ def index(request):
 
     posts = Post.objects.annotate(
         likes_count=Count('likes'),
-    ).order_by('-likes_count').prefetch_related('author')
+    ).order_by('-likes_count').prefetch_related('author', 'tags')
     most_popular_posts = posts[:5]
     most_popular_posts_ids = [post.id for post in most_popular_posts]
     posts_with_comments = Post.objects.filter(
@@ -55,7 +56,7 @@ def index(request):
 
     fresh_posts = Post.objects.annotate(
         likes_count=Count('likes'),
-    ).order_by('published_at').prefetch_related('author')
+    ).order_by('published_at').prefetch_related('author', 'tags')
     most_fresh_posts = list(fresh_posts)[-5:]
     most_popular_fresh_posts_ids = [fresh_post.id for fresh_post in most_fresh_posts]
     posts_with_comments = Post.objects.filter(
