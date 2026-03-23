@@ -1,14 +1,32 @@
 from django.db import models
 from django.urls import reverse
 from django.contrib.auth.models import User
-from django.db.models import Count
-
+from django.db.models import Count, Prefetch
 
 
 class PostQuerySet(models.QuerySet):
 
     def year(self, year):
         return self.filter(published_at__year=year).order_by('published_at')
+
+    def with_tags_and_author(self):
+        tags_with_count = Tag.objects.annotate(related_posts_count=Count('posts'))
+        return self.prefetch_related(
+            'author',
+            Prefetch('tags', queryset=tags_with_count)
+        )
+
+    def fetch_with_comments_count(self):
+        posts = list(self)
+        posts_ids = [post.id for post in posts]
+        posts_with_comments = Post.objects.filter(
+            id__in=posts_ids
+        ).annotate(comments_count=Count('comments'))
+        ids_and_comments = posts_with_comments.values_list('id', 'comments_count')
+        count_for_id = dict(ids_and_comments)
+        for post in posts:
+            post.comments_count = count_for_id[post.id]
+        return posts
 
 
 class TagQuerySet(models.QuerySet):
@@ -24,6 +42,7 @@ class Post(models.Model):
     slug = models.SlugField('Название в виде url', max_length=200)
     image = models.ImageField('Картинка')
     published_at = models.DateTimeField('Дата и время публикации')
+    objects = PostQuerySet.as_manager()
 
     author = models.ForeignKey(
         User,
@@ -51,11 +70,10 @@ class Post(models.Model):
         verbose_name = 'пост'
         verbose_name_plural = 'посты'
 
-    objects = PostQuerySet.as_manager()
-
 
 class Tag(models.Model):
     title = models.CharField('Тег', max_length=20, unique=True)
+    objects = TagQuerySet.as_manager()
 
     def __str__(self):
         return self.title
@@ -70,8 +88,6 @@ class Tag(models.Model):
         ordering = ['title']
         verbose_name = 'тег'
         verbose_name_plural = 'теги'
-
-    objects = TagQuerySet.as_manager()
 
 
 class Comment(models.Model):
